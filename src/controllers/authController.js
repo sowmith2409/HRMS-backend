@@ -1,43 +1,48 @@
 const bcrypt = require("bcrypt");
-const initDB = require("../db");
-const { generateToken } = require("../models/utils");
+const jwt = require("jsonwebtoken");
+const { pool } = require("../db");
+const SECRET = process.env.JWT_SECRET || "default_secret";
 
 exports.registerOrg = async (req, res) => {
-  const db = await initDB();
   const { orgName, name, email, password } = req.body;
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  const hashed = await bcrypt.hash(password, 10);
 
-  const org = await db.run(
-    `INSERT INTO organisations (name) VALUES (?)`,
+  const org = await pool.query(
+    `INSERT INTO organisations (name) VALUES ($1) RETURNING id`,
     [orgName]
   );
 
-  const user = await db.run(
-    `INSERT INTO users (organisation_id, email, name, password_hash, role)
-     VALUES (?, ?, ?, ?, 'admin')`,
-    [org.lastID, email, name, hashedPassword]
+  const user = await pool.query(
+    `INSERT INTO users (organisation_id, email, name, password_hash)
+     VALUES ($1, $2, $3, $4) RETURNING id`,
+    [org.rows[0].id, email, name, hashed]
   );
 
-  const token = generateToken({
-    id: user.lastID,
-    organisation_id: org.lastID,
-    role: "admin"
-  });
+  const token = jwt.sign(
+    { userId: user.rows[0].id, orgId: org.rows[0].id },
+    SECRET,
+    { expiresIn: "8h" }
+  );
 
   res.json({ token });
 };
 
 exports.login = async (req, res) => {
-  const db = await initDB();
   const { email, password } = req.body;
 
-  const user = await db.get(`SELECT * FROM users WHERE email = ?`, [email]);
-  if (!user) return res.status(404).json({ message: "User not found" });
+  const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
+  const user = result.rows[0];
+  if (!user) return res.status(400).json({ message: "Invalid email" });
 
   const match = await bcrypt.compare(password, user.password_hash);
-  if (!match) return res.status(400).json({ message: "Invalid password" });
+  if (!match) return res.status(400).json({ message: "Wrong password" });
 
-  const token = generateToken(user);
+  const token = jwt.sign(
+    { userId: user.id, orgId: user.organisation_id },
+    SECRET,
+    { expiresIn: "8h" }
+  );
+
   res.json({ token });
 };

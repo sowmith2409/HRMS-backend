@@ -1,54 +1,39 @@
-const initDB = require("../db");
+const { pool } = require("../db");
 
 exports.getTeams = async (req, res) => {
-  const db = await initDB();
-  const teams = await db.all(
-    `SELECT * FROM teams WHERE organisation_id = ?`,
+  const result = await pool.query(
+    `SELECT * FROM teams WHERE organisation_id = $1`,
     [req.user.orgId]
   );
-  res.json(teams);
+  res.json(result.rows);
 };
 
 exports.createTeam = async (req, res) => {
-  const db = await initDB();
   const { name, description } = req.body;
-
-  const result = await db.run(
+  const result = await pool.query(
     `INSERT INTO teams (organisation_id, name, description)
-     VALUES (?, ?, ?)`,
+     VALUES ($1, $2, $3) RETURNING id`,
     [req.user.orgId, name, description]
   );
-
-  res.json({ id: result.lastID });
-};
-
-exports.deleteTeam = async (req, res) => {
-  const db = await initDB();
-  const { id } = req.params;
-
-  await db.run(
-    `DELETE FROM teams WHERE id = ? AND organisation_id = ?`,
-    [id, req.user.orgId]
-  );
-
-  res.json({ message: "Team deleted successfully" });
+  res.json({ id: result.rows[0].id });
 };
 
 exports.updateTeam = async (req, res) => {
-  const db = await initDB();
-  const id = req.params.id;
+  const { id } = req.params;
   const { name, description } = req.body;
 
-  const result = await db.run(
-    `UPDATE teams 
-     SET name=?, description=? 
-     WHERE id=? AND organisation_id=?`,
-    [name, description, id, req.user.orgId]
+  await pool.query(
+    `UPDATE teams SET name=$1, description=$2 WHERE id=$3`,
+    [name, description, id]
   );
 
-  if (result.changes === 0) {
-    return res.status(404).json({ message: "Team not found" });
-  }
+  res.json({ message: "Team updated" });
+};
 
-  res.json({ message: "Team updated successfully" });
+exports.deleteTeam = async (req, res) => {
+  const { id } = req.params;
+
+  await pool.query(`DELETE FROM teams WHERE id=$1`, [id]);
+
+  res.json({ message: "Team deleted" });
 };

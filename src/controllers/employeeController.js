@@ -1,59 +1,45 @@
-const initDB = require("../db");
+const { pool } = require("../db");
 
 exports.getEmployees = async (req, res) => {
-  const db = await initDB();
-  const employees = await db.all(
-    `SELECT * FROM employees WHERE organisation_id = ?`,
-    [req.user.orgId]
+  const orgId = req.user.orgId;
+
+  const result = await pool.query(
+    `SELECT * FROM employees WHERE organisation_id = $1`,
+    [orgId]
   );
-  res.json(employees);
+
+  res.json(result.rows);
 };
 
 exports.createEmployee = async (req, res) => {
-  const db = await initDB();
+  const orgId = req.user.orgId;
   const { first_name, last_name, email, phone } = req.body;
 
-  const result = await db.run(
+  const result = await pool.query(
     `INSERT INTO employees (organisation_id, first_name, last_name, email, phone)
-    VALUES (?, ?, ?, ?, ?)`,
-    [req.user.orgId, first_name, last_name, email, phone]
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [orgId, first_name, last_name, email, phone]
   );
 
-  res.json({ id: result.lastID });
-};
- 
-// Delete Employee
-exports.deleteEmployee = async (req, res) => {
-  const db = await initDB();
-  const { id } = req.params;
-
-  const result = await db.run(
-    `DELETE FROM employees WHERE id = ? AND organisation_id = ?`,
-    [id, req.user.orgId]
-  );
-
-  if (result.changes === 0) {
-    return res.status(404).json({ message: "Employee not found" });
-  }
-
-  res.json({ message: "Employee deleted successfully" });
+  res.json({ id: result.rows[0].id });
 };
 
 exports.updateEmployee = async (req, res) => {
-  const db = await initDB();
   const { id } = req.params;
   const { first_name, last_name, email, phone } = req.body;
 
-  try {
-    await db.run(
-      `UPDATE employees 
-       SET first_name = ?, last_name = ?, email = ?, phone = ?
-       WHERE id = ? AND organisation_id = ?`,
-      [first_name, last_name, email, phone, id, req.user.orgId]
-    );
+  await pool.query(
+    `UPDATE employees SET first_name=$1, last_name=$2, email=$3, phone=$4 WHERE id=$5`,
+    [first_name, last_name, email, phone, id]
+  );
 
-    res.json({ message: "Employee updated successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Error updating employee" });
-  }
+  res.json({ message: "Employee updated" });
+};
+
+exports.deleteEmployee = async (req, res) => {
+  const { id } = req.params;
+
+  await pool.query(`DELETE FROM employees WHERE id=$1`, [id]);
+
+  res.json({ message: "Employee deleted" });
 };

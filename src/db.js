@@ -1,61 +1,62 @@
-const sqlite3 = require("sqlite3");
-const { open } = require("sqlite");
-const path = require("path");
+const { Pool } = require("pg");
+require("dotenv").config();
 
-async function initDB() {
-  const db = await open({
-    filename: path.join(__dirname, "../hrms.db"),
-    driver: sqlite3.Database
-  });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
 
-  await db.exec(`
+async function initializeDatabase() {
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS organisations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL
+      id SERIAL PRIMARY KEY,
+      name VARCHAR(255) NOT NULL
     );
 
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organisation_id INTEGER,
-      email TEXT UNIQUE NOT NULL,
-      name TEXT,
-      password_hash TEXT NOT NULL,
-      role TEXT DEFAULT 'admin'
+      id SERIAL PRIMARY KEY,
+      organisation_id INT REFERENCES organisations(id),
+      email VARCHAR(255) UNIQUE NOT NULL,
+      name VARCHAR(255),
+      password_hash VARCHAR(255) NOT NULL,
+      role VARCHAR(50) DEFAULT 'admin'
     );
 
     CREATE TABLE IF NOT EXISTS employees (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organisation_id INTEGER,
-      first_name TEXT,
-      last_name TEXT,
-      email TEXT,
-      phone TEXT
+      id SERIAL PRIMARY KEY,
+      organisation_id INT REFERENCES organisations(id),
+      first_name VARCHAR(255),
+      last_name VARCHAR(255),
+      email VARCHAR(255),
+      phone VARCHAR(50)
     );
 
     CREATE TABLE IF NOT EXISTS teams (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organisation_id INTEGER,
-      name TEXT NOT NULL,
+      id SERIAL PRIMARY KEY,
+      organisation_id INT REFERENCES organisations(id),
+      name VARCHAR(255) NOT NULL,
       description TEXT
     );
 
     CREATE TABLE IF NOT EXISTS employee_teams (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      employee_id INTEGER,
-      team_id INTEGER
+      id SERIAL PRIMARY KEY,
+      employee_id INT REFERENCES employees(id) ON DELETE CASCADE,
+      team_id INT REFERENCES teams(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      organisation_id INTEGER,
-      user_id INTEGER,
-      action TEXT,
-      meta TEXT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      id SERIAL PRIMARY KEY,
+      organisation_id INT,
+      user_id INT,
+      action VARCHAR(255),
+      meta JSONB,
+      timestamp TIMESTAMP DEFAULT NOW()
     );
   `);
 
-  return db;
+  console.log("✅ PostgreSQL ready");
 }
 
-module.exports = initDB;
+module.exports = { pool, initializeDatabase };

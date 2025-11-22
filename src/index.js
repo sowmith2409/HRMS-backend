@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const path = require("path");
+const { initializeDatabase } = require("./db");
 
 const authRoutes = require("./routes/auth");
 const employeeRoutes = require("./routes/employees");
@@ -14,8 +14,10 @@ app.use("/api/auth", authRoutes);
 app.use("/api/employees", employeeRoutes);
 app.use("/api/teams", teamRoutes);
 
-app.get("/", (req, res) => {
-  res.send("HRMS API is running...");
-});
+app.get("/", (req, res) => res.send("HRMS API is running"));
 
-app.listen(5000, () => console.log("Server Running at http://localhost:5000/"));
+const PORT = process.env.PORT || 5000;
+
+initializeDatabase().then(() => {
+  app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+});
